@@ -124,6 +124,48 @@
       "missing_pct": 50.79851936186422
     }
   ],
+  "smart_interpretation": [
+    {
+      "feature": "r_5",
+      "meaning": "Reallocated sector count",
+      "healthy_mean": 7.061879377620168,
+      "failed_mean": 126.4047412546979,
+      "failed_to_healthy_mean_ratio": 17.899589400420474,
+      "healthy_nonzero_rate": 0.08510181109768714,
+      "failed_nonzero_rate": 0.6736050881757734,
+      "missing_pct": 0.00014160655468420323
+    },
+    {
+      "feature": "r_9",
+      "meaning": "Power on hours",
+      "healthy_mean": 30440.156571161853,
+      "failed_mean": 27884.30297773923,
+      "failed_to_healthy_mean_ratio": 0.9160367790011972,
+      "healthy_nonzero_rate": 0.9999971539283615,
+      "failed_nonzero_rate": 1.0,
+      "missing_pct": 0.00014160655468420323
+    },
+    {
+      "feature": "r_12",
+      "meaning": "Power cycle count",
+      "healthy_mean": 31.81004478741415,
+      "failed_mean": 35.57865168539326,
+      "failed_to_healthy_mean_ratio": 1.1184722286046633,
+      "healthy_nonzero_rate": 0.9910021445149796,
+      "failed_nonzero_rate": 0.9777392309916161,
+      "missing_pct": 0.9061403434242163
+    },
+    {
+      "feature": "r_175",
+      "meaning": "Power loss protection failure",
+      "healthy_mean": 978094952281.106,
+      "failed_mean": 1121985332736.0225,
+      "failed_to_healthy_mean_ratio": 1.1471128954498093,
+      "healthy_nonzero_rate": 0.49291683920975976,
+      "failed_nonzero_rate": 0.30875975715524717,
+      "missing_pct": 50.79851936186422
+    }
+  ],
   "top_failure_models": [
     {
       "model": "A3",
@@ -683,6 +725,8 @@
     "dedup_csv": "D:\\大数据处理\\大作业\\源代码\\dedup_smart_failure.csv",
     "figures": [
       "figures/smart_other_boxplots.png",
+      "figures/smart_indicator_interpretation.png",
+      "figures/r5_model_signal_summary.png",
       "figures/smart_correlation_heatmap.png",
       "figures/smart_multi_metric_violin.png",
       "figures/model_failure_and_metrics.png",
@@ -692,6 +736,8 @@
     ],
     "results": [
       "results/indicator_failure_comparison.csv",
+      "results/smart_feature_interpretation_summary.csv",
+      "results/r5_model_signal_summary.csv",
       "results/model_failure_feature_summary.csv",
       "results/app_failure_summary.csv",
       "results/slot_failure_summary.csv",

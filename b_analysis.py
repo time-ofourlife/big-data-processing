@@ -145,6 +145,138 @@ def save_smart_boxplots(dedup: pd.DataFrame) -> None:
     plt.close(fig)
 
 
+def save_interpretable_smart_plots(dedup: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    meanings = {
+        "r_5": "Reallocated sector count",
+        "r_9": "Power on hours",
+        "r_12": "Power cycle count",
+        "r_175": "Power loss protection failure",
+    }
+    for feature in RAW_FEATURES:
+        healthy = dedup.loc[dedup["failure"] == 0, feature]
+        failed = dedup.loc[dedup["failure"] == 1, feature]
+        healthy_mean = float(healthy.mean())
+        failed_mean = float(failed.mean())
+        rows.append(
+            {
+                "feature": feature,
+                "meaning": meanings[feature],
+                "healthy_mean": healthy_mean,
+                "failed_mean": failed_mean,
+                "failed_to_healthy_mean_ratio": failed_mean / healthy_mean if healthy_mean else np.nan,
+                "healthy_nonzero_rate": float((healthy.fillna(0) > 0).mean()),
+                "failed_nonzero_rate": float((failed.fillna(0) > 0).mean()),
+                "missing_pct": float(dedup[feature].isna().mean() * 100),
+            }
+        )
+
+    summary = pd.DataFrame(rows)
+    summary.to_csv(RESULT_DIR / "smart_feature_interpretation_summary.csv", index=False)
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.8), constrained_layout=True)
+    sns.barplot(
+        data=summary,
+        x="feature",
+        y="failed_to_healthy_mean_ratio",
+        hue="feature",
+        palette="viridis",
+        legend=False,
+        ax=axes[0],
+    )
+    axes[0].axhline(1, color="#D62728", linestyle="--", linewidth=1.2)
+    axes[0].set_title("Failed / Healthy Mean Ratio")
+    axes[0].set_xlabel("SMART feature")
+    axes[0].set_ylabel("ratio (log scale)")
+    axes[0].set_yscale("log")
+
+    nonzero = summary.melt(
+        id_vars=["feature"],
+        value_vars=["healthy_nonzero_rate", "failed_nonzero_rate"],
+        var_name="group",
+        value_name="nonzero_rate",
+    )
+    nonzero["group"] = nonzero["group"].map(
+        {"healthy_nonzero_rate": "healthy", "failed_nonzero_rate": "failed"}
+    )
+    sns.barplot(
+        data=nonzero,
+        x="feature",
+        y="nonzero_rate",
+        hue="group",
+        palette={"healthy": "#4C78A8", "failed": "#F58518"},
+        ax=axes[1],
+    )
+    axes[1].set_title("Non-zero Rate by Failure Status")
+    axes[1].set_xlabel("SMART feature")
+    axes[1].set_ylabel("non-zero rate")
+
+    sns.barplot(
+        data=summary,
+        x="feature",
+        y="missing_pct",
+        hue="feature",
+        palette="mako",
+        legend=False,
+        ax=axes[2],
+    )
+    axes[2].set_title("Missing Rate")
+    axes[2].set_xlabel("SMART feature")
+    axes[2].set_ylabel("missing (%)")
+
+    fig.suptitle("SMART Indicator Interpretability Summary", fontsize=14)
+    fig.savefig(FIG_DIR / "smart_indicator_interpretation.png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    model_r5 = (
+        dedup.assign(r5_nonzero=dedup["r_5"].fillna(0) > 0)
+        .groupby("model")
+        .agg(
+            sample_count=("failure", "size"),
+            failure_rate=("failure", "mean"),
+            r5_nonzero_rate=("r5_nonzero", "mean"),
+            r5_mean=("r_5", "mean"),
+            r5_p95=("r_5", lambda x: x.quantile(0.95)),
+        )
+        .reset_index()
+        .sort_values("failure_rate", ascending=False)
+    )
+    model_r5.to_csv(RESULT_DIR / "r5_model_signal_summary.csv", index=False)
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8), constrained_layout=True)
+    sns.barplot(
+        data=model_r5,
+        x="model",
+        y="failure_rate",
+        hue="model",
+        palette="viridis",
+        legend=False,
+        ax=axes[0],
+    )
+    axes[0].set_title("Failure Rate by Model")
+    axes[0].set_xlabel("model")
+    axes[0].set_ylabel("failure rate")
+
+    sns.barplot(
+        data=model_r5,
+        x="model",
+        y="r5_nonzero_rate",
+        hue="model",
+        palette="flare",
+        legend=False,
+        ax=axes[1],
+    )
+    axes[1].set_title("r_5 > 0 Rate by Model")
+    axes[1].set_xlabel("model")
+    axes[1].set_ylabel("non-zero rate")
+
+    fig.suptitle("r_5 Signal by Model: More Interpretable than Boxplot", fontsize=14)
+    fig.savefig(FIG_DIR / "r5_model_signal_summary.png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    return summary
+
+
 def save_corr_heatmap(dedup: pd.DataFrame) -> None:
     corr_data = dedup[FEATURES + ["failure"]].copy()
     for col in RAW_FEATURES:
@@ -536,6 +668,7 @@ def train_failure_model(dedup: pd.DataFrame) -> dict:
 def write_run_summary(
     summary: dict,
     indicators: pd.DataFrame,
+    smart_interpretation: pd.DataFrame,
     model_stats: pd.DataFrame,
     location_stats: dict[str, pd.DataFrame],
     model_result: dict,
@@ -552,6 +685,7 @@ def write_run_summary(
     payload = {
         "data_summary": summary,
         "indicator_comparison": indicators.to_dict(orient="records"),
+        "smart_interpretation": smart_interpretation.to_dict(orient="records"),
         "top_failure_models": model_stats.head(5).to_dict(orient="records"),
         "top_failure_apps": location_stats["app_stats"].head(5).to_dict(orient="records"),
         "top_failure_slots": location_stats["slot_stats"].head(5).to_dict(orient="records"),
@@ -561,6 +695,8 @@ def write_run_summary(
             "dedup_csv": str(DEDUP_PATH),
             "figures": [
                 "figures/smart_other_boxplots.png",
+                "figures/smart_indicator_interpretation.png",
+                "figures/r5_model_signal_summary.png",
                 "figures/smart_correlation_heatmap.png",
                 "figures/smart_multi_metric_violin.png",
                 "figures/model_failure_and_metrics.png",
@@ -570,6 +706,8 @@ def write_run_summary(
             ],
             "results": [
                 "results/indicator_failure_comparison.csv",
+                "results/smart_feature_interpretation_summary.csv",
+                "results/r5_model_signal_summary.csv",
                 "results/model_failure_feature_summary.csv",
                 "results/app_failure_summary.csv",
                 "results/slot_failure_summary.csv",
@@ -589,13 +727,14 @@ def main() -> None:
     ensure_dirs()
     _, dedup, summary = load_and_dedup()
     save_smart_boxplots(dedup)
+    smart_interpretation = save_interpretable_smart_plots(dedup)
     save_corr_heatmap(dedup)
     save_violin_plot(dedup)
     model_stats = save_model_plots_and_stats(dedup)
     location_stats = save_location_plots_and_stats(dedup)
     indicators = indicator_summary(dedup)
     model_result = train_failure_model(dedup)
-    write_run_summary(summary, indicators, model_stats, location_stats, model_result)
+    write_run_summary(summary, indicators, smart_interpretation, model_stats, location_stats, model_result)
 
     print("B analysis completed.")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
